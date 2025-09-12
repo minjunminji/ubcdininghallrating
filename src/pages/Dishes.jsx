@@ -6,7 +6,12 @@ const Dishes = () => {
   const navigate = useNavigate()
   const meal = searchParams.get('meal')
   const hall = searchParams.get('hall')
-  const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
+  const todayLocalISO = () => {
+    const d = new Date()
+    const tzo = d.getTimezoneOffset() * 60000
+    return new Date(d.getTime() - tzo).toISOString().slice(0,10)
+  }
+  const date = searchParams.get('date') || todayLocalISO()
 
   const [stations, setStations] = React.useState([])
   const [loading, setLoading] = React.useState(false)
@@ -22,32 +27,50 @@ const Dishes = () => {
   setLoading(true)
   fetch(`http://localhost:4000/api/dishes?hall=${encodeURIComponent(hall)}&meal=${encodeURIComponent(meal)}&date=${encodeURIComponent(date)}`)
       .then(r => r.json())
-      .then(data => setStations(data || []))
+      .then(data => setStations(Array.isArray(data) ? data : []))
       .catch(e => setError(e.message || 'Failed'))
       .finally(() => setLoading(false))
   }, [meal, hall, date])
 
-  return (
-    <div>
-      <button onClick={() => navigate(-1)}>Back</button>
-      <h2>{formatName(hall)} - {formatName(meal)}</h2>
-      {loading && <p>Loading...</p>}
-      {error && <p>Error: {error}</p>}
+  const ratingClass = (avg) => {
+    if (avg == null) return 'rating-mid'
+    if (avg >= 4) return 'rating-high'
+    if (avg >= 3) return 'rating-mid'
+    return 'rating-low'
+  }
 
-      {stations.map(station => (
-        <div key={station.station}>
-          <h2>{station.station}</h2>
-          <ul>
-            {(station.dishes || []).map(dish => (
-              <li key={dish.id}>
-                    <strong>{dish.name}</strong> — {dish.avg_rating !== null && dish.avg_rating !== undefined
-                      ? `${Number(dish.avg_rating).toFixed(2)} ⭐`
-                      : 'N/A'} {`(${dish.num_ratings || 0} ratings)`}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+  return (
+    <div className="dishes">
+      <div style={{ marginLeft: '24px', marginTop: '8px' }}>
+        <a href="#" onClick={(e) => { e.preventDefault(); navigate(-1) }} aria-label="Back">←</a>
+      </div>
+
+      {loading && <p style={{ marginLeft: '60px' }}>Loading...</p>}
+      {error && <p style={{ marginLeft: '60px' }}>Error: {error}</p>}
+
+      <div className="grid">
+        {stations.map(st => (
+          <div className="station" key={st.station}>
+            <div className="station-header static">
+              <span className="title">{st.station}</span>
+            </div>
+            <ul className="dish-list">
+              {(st.dishes || []).map(d => {
+                const avg = d.avg_rating
+                const avgStr = avg != null ? Number(avg).toFixed(1) : '—'
+                return (
+                  <li key={d.id} className="dish-row">
+                    <span className="name">{d.name}</span>
+                    <span className={`avg ${ratingClass(avg)}`}>{avgStr}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      <a className="rateLink" href="#" onClick={(e) => { e.preventDefault(); navigate('/rate') }}>rate</a>
     </div>
   )
 }

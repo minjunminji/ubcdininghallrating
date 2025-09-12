@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import StarRating from '../components/StarRating'
 
 const Rate = () => {
   const [selectedMeal, setSelectedMeal] = useState('')
   const [selectedHall, setSelectedHall] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  // Use today's local date for rating; no selector needed
+  const todayLocalISO = () => {
+    const d = new Date()
+    const tzo = d.getTimezoneOffset() * 60000
+    return new Date(d.getTime() - tzo).toISOString().slice(0,10)
+  }
+  const date = todayLocalISO()
 
   const [stations, setStations] = useState([])
+  const [openMap, setOpenMap] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState({})
@@ -16,28 +25,36 @@ const Rate = () => {
   const [submitted, setSubmitted] = useState({})
   const [sending, setSending] = useState({})
   const [message, setMessage] = useState('')
+  const navigate = useNavigate()
 
   const meals = [
-    { value: 'breakfast', label: 'Breakfast' },
-    { value: 'lunch', label: 'Lunch' },
-    { value: 'dinner', label: 'Dinner' },
+    { value: 'breakfast', label: 'breakfast' },
+    { value: 'lunch', label: 'lunch' },
+    { value: 'dinner', label: 'dinner' },
   ]
   const halls = [
-    { value: 'feast', label: 'Feast' },
-    { value: 'gather', label: 'Gather' },
-    { value: 'open-kitchen', label: 'Open Kitchen' },
+    { value: 'feast', label: 'totem park' },
+    { value: 'gather', label: 'place vanier' },
+    { value: 'open-kitchen', label: 'orchard commons' },
   ]
 
-  const fetchDishes = async () => {
+  const fetchDishes = async (hallArg, mealArg) => {
+    const hallVal = hallArg || selectedHall
+    const mealVal = mealArg || selectedMeal
+    if (!hallVal || !mealVal || !date) return
     setError(null)
     setStations([])
-    if (!selectedHall || !selectedMeal || !date) return
     setLoading(true)
     try {
-      const r = await fetch(`http://localhost:4000/api/dishes?hall=${encodeURIComponent(selectedHall)}&meal=${encodeURIComponent(selectedMeal)}&date=${encodeURIComponent(date)}`)
+      const r = await fetch(`http://localhost:4000/api/dishes?hall=${encodeURIComponent(hallVal)}&meal=${encodeURIComponent(mealVal)}&date=${encodeURIComponent(date)}`)
       if (!r.ok) throw new Error('Failed fetching dishes')
       const data = await r.json()
-      setStations(data || [])
+      const arr = Array.isArray(data) ? data : []
+      setStations(arr)
+      // initialize all stations as collapsed
+      const init = {}
+      arr.forEach(s => { init[s.station] = false })
+      setOpenMap(init)
     } catch (e) {
       setError('Error')
     } finally {
@@ -46,8 +63,18 @@ const Rate = () => {
   }
 
   useEffect(() => {
-    fetchDishes()
-  }, [selectedHall, selectedMeal, date])
+    // when both are chosen, fetch
+    if (selectedHall && selectedMeal) fetchDishes(selectedHall, selectedMeal)
+  }, [selectedHall, selectedMeal])
+
+  const onSelectMeal = (v) => {
+    setSelectedMeal(v)
+    if (selectedHall && v) fetchDishes(selectedHall, v)
+  }
+  const onSelectHall = (v) => {
+    setSelectedHall(v)
+    if (v && selectedMeal) fetchDishes(v, selectedMeal)
+  }
 
   const postRating = async (dishId, ratingVal) => {
     if (!Number.isFinite(Number(dishId))) {
@@ -59,7 +86,7 @@ const Rate = () => {
       const res = await fetch('http://localhost:4000/api/rate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dish_id: Number(dishId), meal: mealParam, offer_date: date, rating: Number(ratingVal) })
+        body: JSON.stringify({ dish_id: Number(dishId), meal: selectedMeal, offer_date: date, rating: Number(ratingVal) })
       })
       if (!res.ok) {
         const text = await res.text()
@@ -80,8 +107,7 @@ const Rate = () => {
 
   const handleStarClick = (dishId, ratingVal) => {
     setRatings(prev => ({ ...prev, [dishId]: ratingVal }))
-    // send immediately
-    postRating(dishId, ratingVal)
+    // Do not submit immediately; wait for Submit button
   }
 
   const handleSubmit = async (e) => {
@@ -96,74 +122,65 @@ const Rate = () => {
       // eslint-disable-next-line no-await-in-loop
       await postRating(dishId, ratingVal)
     }
+    // After submitting all, refresh once
+    await fetchDishes()
   }
 
   return (
-    <div>
+    <div className="ratePage">
       <form onSubmit={handleSubmit}>
-        <div>
-          <h2>Select Meal</h2>
-          <select value={selectedMeal} onChange={e => setSelectedMeal(e.target.value)}>
-            <option value="">-- choose meal --</option>
-            {meals.map(m => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
+        {/* Meal tabs */}
+        <div className="tabRow" style={{ marginTop: '16px' }}>
+          {meals.map(m => (
+            <a key={m.value} href="#" className={`tab ${selectedMeal === m.value ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); onSelectMeal(m.value) }}>{m.label}</a>
+          ))}
+        </div>
+        {/* Hall tabs */}
+        <div className="tabRow" style={{ marginTop: '8px' }}>
+          {halls.map(h => (
+            <a key={h.value} href="#" className={`tab ${selectedHall === h.value ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); onSelectHall(h.value) }}>{h.label}</a>
+          ))}
         </div>
 
-        <div>
-          <h2>Select Hall</h2>
-          <select value={selectedHall} onChange={e => setSelectedHall(e.target.value)}>
-            <option value="">-- choose hall --</option>
-            {halls.map(h => (
-              <option key={h.value} value={h.value}>{h.label}</option>
-            ))}
-          </select>
-        </div>
+        {(!selectedMeal || !selectedHall) && (
+          <p style={{ marginLeft: '60px' }}>Choose a meal and hall to start rating.</p>
+        )}
 
-        <div>
-          <h2>Date</h2>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-        </div>
-
-        {loading && <p>Loading...</p>}
-        {error && <p>{error}</p>}
-
-        {!loading && !error && stations.map(station => (
-          <div key={station.station}>
-            <h2>{station.station}</h2>
-            <ul>
-              {(station.dishes || []).map(d => (
-                <li key={d.id}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div>
-                      <strong>{d.name}</strong>
-                      {d.avg_rating != null && <span> — {Number(d.avg_rating).toFixed(2)} ⭐ ({d.num_ratings} ratings)</span>}
-                      {(!d.num_ratings || d.num_ratings === 0) && <span> — N/A (0 ratings)</span>}
-                    </div>
-                    <div>
-                      {[1,2,3,4,5].map(star => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => handleStarClick(d.id, star)}
-                        >
-                          {star <= (ratings[d.id] || 0) ? '\u2605' : '\u2606'}
-                        </button>
+        {selectedMeal && selectedHall && (
+          <div className="rateList">
+            {(stations || []).map(s => {
+              const isOpen = !!openMap[s.station]
+              const allDishes = Array.isArray(s.dishes) ? s.dishes : []
+              const ratedDishes = allDishes.filter(d => ratings[d.id])
+              const visible = isOpen ? allDishes : ratedDishes
+              return (
+                <div key={s.station} className="rateSection">
+                  <div className="rateHeader" onClick={() => setOpenMap(m => ({ ...m, [s.station]: !m[s.station] }))}>
+                    <span className="chev">{isOpen ? '▾' : '›'}</span>
+                    <span className="title">{s.station}</span>
+                  </div>
+                  {visible.length > 0 && (
+                    <div className="rateDishes">
+                      {visible.map(d => (
+                        <div key={d.id} className="rateRow">
+                          <span className="name">{d.name}</span>
+                          <span className="stars"><StarRating name={`rate-${d.id}`} value={ratings[d.id] || 0} onChange={(v) => handleStarClick(d.id, v)} /></span>
+                        </div>
                       ))}
                     </div>
-                    <div>
-                      {sending[d.id] ? <em>Sending...</em> : submitted[d.id] ? <em>Saved</em> : null}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  )}
+                </div>
+              )
+            })}
           </div>
-        ))}
+        )}
 
-        <button type="submit">Submit Ratings</button>
-        {message && <p>{message}</p>}
+        {selectedMeal && selectedHall && !loading && (stations || []).length === 0 && (
+          <p style={{ marginLeft: '60px' }}>No stations found for today.</p>
+        )}
+
+        <a className="submitLink" href="#" onClick={(e) => { e.preventDefault(); handleSubmit(e) }}>submit</a>
+        {message && <p style={{ marginLeft: '60px' }}>{message}</p>}
       </form>
     </div>
   )

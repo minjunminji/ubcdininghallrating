@@ -63,6 +63,7 @@ app.get('/api/halls', async (req, res) => {
       .select('hall,dish_id')
       .eq('meal', meal)
       .eq('offer_date', date)
+      .order('id', { ascending: true })
 
     if (offersError) return res.status(500).json({ error: offersError.message })
 
@@ -133,17 +134,18 @@ app.get('/api/dishes', async (req, res) => {
       .eq('hall', hall)
       .eq('meal', meal)
       .eq('offer_date', date)
+      .order('id', { ascending: true })
 
     if (offersError) return res.status(500).json({ error: offersError.message })
 
     const dishIds = Array.from(new Set((offers || []).map(o => o.dish_id).filter(Boolean)))
 
-    // fetch dish details (use name_raw)
+    // fetch dish details (fetch all to be robust across schema variations)
     let dishesMap = {}
     if (dishIds.length > 0) {
       const { data: dishRows, error: dishError } = await supabase
         .from('dishes')
-        .select('id,name_raw')
+        .select('*')
         .in('id', dishIds)
       if (dishError) return res.status(500).json({ error: dishError.message })
       dishesMap = (dishRows || []).reduce((acc, d) => { acc[d.id] = d; return acc }, {})
@@ -168,7 +170,8 @@ app.get('/api/dishes', async (req, res) => {
   const d = dishesMap[o.dish_id] || { id: o.dish_id, name_raw: null }
   const stats = perDish[o.dish_id] || { avg: null, count: 0 }
   const avgRounded = (stats.avg !== null && typeof stats.avg === 'number') ? Number(stats.avg.toFixed(2)) : null
-  stationsMap[station].push({ id: d.id, name: d.name_raw || null, avg_rating: avgRounded, num_ratings: stats.count })
+  const displayName = (d.name_raw || d.name || d.title || d.display_name || null)
+  stationsMap[station].push({ id: d.id, name: displayName, avg_rating: avgRounded, num_ratings: stats.count })
     }
 
     const result = Object.keys(stationsMap).map(st => ({ station: st, dishes: stationsMap[st] }))

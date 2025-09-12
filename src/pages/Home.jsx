@@ -8,14 +8,13 @@ const Home = () => {
   }
 
   return (
-    <div>
-      <div>
-        <button onClick={() => handleMealClick('Breakfast')}>Breakfast</button>
-        <button onClick={() => handleMealClick('Lunch')}>Lunch</button>
-        <button onClick={() => handleMealClick('Dinner')}>Dinner</button>
+    <div className="home">
+      <div className="meals">
+        <a href="#" onClick={(e) => { e.preventDefault(); handleMealClick('Breakfast') }}>breakfast</a>
+        <a href="#" onClick={(e) => { e.preventDefault(); handleMealClick('Lunch') }}>lunch</a>
+        <a href="#" onClick={(e) => { e.preventDefault(); handleMealClick('Dinner') }}>dinner</a>
       </div>
-
-      <button onClick={() => navigate('/rate')}>Rate Dishes</button>
+      <a className="rateLink" href="#" onClick={(e) => { e.preventDefault(); navigate('/rate') }}>rate</a>
     </div>
   )
 }

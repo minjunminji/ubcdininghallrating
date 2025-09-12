@@ -131,80 +131,67 @@ async function fetchJson(url: string) {
   return res.json();
 }
 
-function collectStationsFromJson(json: any): Station[] {
-  const stations: Station[] = [];
-
-  const extractFoodAllergens = (food: any) => {
-    const out: string[] = [];
-    const push = (v: any) => {
-      if (!v) return;
-      if (typeof v === "string") out.push(v);
-      else if (v.slug) out.push(v.slug);
-      else if (v.name) out.push(v.name);
-      else if (v.synced_name) out.push(v.synced_name);
-      else if (v.label) out.push(v.label);
-    };
-    const buckets = [
-      food?.icons?.food_icons,
-      food?.food_icons,
-      Array.isArray(food?.icons) ? food?.icons : undefined,
-      ...(food?.icons && typeof food.icons === "object" && !Array.isArray(food.icons)
-        ? Object.values(food.icons)
-        : []),
-    ].filter(Boolean);
-    for (const b of buckets) Array.isArray(b) && b.forEach(push);
-    return Array.from(new Set(out));
+// Extract allergens helper
+function extractFoodAllergens(food: any): string[] {
+  const out: string[] = [];
+  const push = (v: any) => {
+    if (!v) return;
+    if (typeof v === "string") out.push(v);
+    else if (v.slug) out.push(v.slug);
+    else if (v.name) out.push(v.name);
+    else if (v.synced_name) out.push(v.synced_name);
+    else if (v.label) out.push(v.label);
   };
+  const buckets = [
+    food?.icons?.food_icons,
+    food?.food_icons,
+    Array.isArray(food?.icons) ? food?.icons : undefined,
+    ...(food?.icons && typeof food.icons === "object" && !Array.isArray(food.icons)
+      ? Object.values(food.icons)
+      : []),
+  ].filter(Boolean);
+  for (const b of buckets) Array.isArray(b) && b.forEach(push);
+  return Array.from(new Set(out));
+}
+
+// Heuristic fallback (legacy)
+function heuristicCollectStations(json: any): Station[] {
+  const stations: Station[] = [];
 
   const parseArray = (arr: any[]) => {
     let current: Station = { station: "General", dishes: [] };
     let seenAny = false;
-
     for (const item of arr) {
       if (!item || typeof item !== "object") continue;
-
       const isHeader =
         item.is_section_title === true ||
         item.isSectionTitle === true ||
         item.is_section === true ||
         item.isSection === true ||
         (item.text && !item.food && item.is_section_title !== false);
-
       if (isHeader) {
         if (current.dishes.length || seenAny) stations.push(current);
-        const label =
-          (item.text || item.title || item.sectionTitle || item.name || item.label || item.section_name || "")
-            .toString()
-            .trim() || "Section";
+        const label = (item.text || item.title || item.sectionTitle || item.name || item.label || item.section_name || "")
+          .toString().trim() || "Section";
         current = { station: label, dishes: [] };
         seenAny = true;
         continue;
       }
-
       const food = item.food || item.menu || item.menu_item || item.item || item.menuItem || item.menu_item_detail;
       if (food || (item.name && (item.id || item.food))) {
         const f = food || item;
         const id = f.id ?? f.menuItemId ?? f.menu_item_id ?? f.masterItemId ?? null;
         const name = (f.name ?? f.title ?? f.itemName ?? f.displayName ?? item.name ?? "").toString().trim();
         if (name) {
-          current.dishes.push({
-            id: typeof id === "number" ? id : id ? Number(id) : null,
-            name,
-            allergens: extractFoodAllergens(f),
-          });
+          current.dishes.push({ id: typeof id === "number" ? id : id ? Number(id) : null, name, allergens: extractFoodAllergens(f) });
           seenAny = true;
         }
         continue;
       }
-
-      for (const v of Object.values(item)) {
-        if (Array.isArray(v)) parseArray(v);
-      }
+      for (const v of Object.values(item)) if (Array.isArray(v)) parseArray(v);
     }
-
     if (current.dishes.length) stations.push(current);
   };
-
   const walk = (node: any) => {
     if (!node) return;
     if (Array.isArray(node)) {
@@ -214,26 +201,51 @@ function collectStationsFromJson(json: any): Station[] {
       node.forEach(walk);
       return;
     }
-    if (typeof node === "object") {
-      Object.values(node).forEach(walk);
-    }
+    if (typeof node === "object") Object.values(node).forEach(walk);
   };
-
   walk(json);
-
-  // De-dupe by station name (keep first)
   const seen = new Set<string>();
-  return stations.filter((s) => {
-    if (seen.has(s.station)) return false;
-    seen.add(s.station);
-    return true;
-  });
+  return stations.filter((s) => { if (seen.has(s.station)) return false; seen.add(s.station); return true; });
+}
+
+// Preferred: use days.menu_info + menu_items[].menu_id to map section -> dishes
+function collectStationsFromJsonForDate(json: any, isoDate: string): Station[] {
+  const days = Array.isArray(json?.days) ? json.days : [];
+  // choose the day matching isoDate, or first with menu_items
+  let day = days.find((d: any) => d?.date === isoDate) || days.find((d: any) => Array.isArray(d?.menu_items) && d.menu_items.length) || days[0];
+  if (!day) return heuristicCollectStations(json);
+
+  if (day.menu_info && Array.isArray(day.menu_items)) {
+    const idToName = new Map<string, string>();
+    for (const [sid, info] of Object.entries(day.menu_info)) {
+      const name = (info as any)?.section_options?.display_name ?? (info as any)?.display_name ?? (info as any)?.name ?? `Section ${sid}`;
+      idToName.set(String(sid), String(name));
+    }
+    const groups = new Map<string, Station>();
+    for (const item of day.menu_items) {
+      if (!item) continue;
+      const sid = String((item as any).menu_id ?? (item as any).menuId ?? (item as any).section_id ?? (item as any).sectionId ?? "");
+      const food = (item as any).food || (item as any).menu_item || (item as any).menuItem || (item as any).item || (item as any).menu_item_detail;
+      if (!food) continue;
+      const idRaw = food.id ?? food.menuItemId ?? food.menu_item_id ?? food.masterItemId ?? null;
+      const id = typeof idRaw === "number" ? idRaw : idRaw ? Number(idRaw) : null;
+      const name = (food.name ?? food.title ?? food.itemName ?? food.displayName ?? "").toString().trim();
+      if (!name) continue;
+      const stationName = idToName.get(sid) ?? "General";
+      const group = groups.get(stationName) ?? { station: stationName, dishes: [] };
+      group.dishes.push({ id, name, allergens: extractFoodAllergens(food) });
+      groups.set(stationName, group);
+    }
+    return Array.from(groups.values());
+  }
+  // fallback
+  return heuristicCollectStations(json);
 }
 
 async function scrapeMenu(hall: Hall, meal: Meal, isoDate: string): Promise<StationBlock[]> {
   const url = buildUrl(hall, meal, isoDate);
   const json = await fetchJson(url);
-  const stations = collectStationsFromJson(json);
+  const stations = collectStationsFromJsonForDate(json, isoDate);
   return stations.map((s) => ({ hall, meal, date: isoDate, station: s.station, dishes: s.dishes }));
 }
 
@@ -267,30 +279,21 @@ async function saveToSupabase(blocks: StationBlock[]) {
     if (error) throw new Error(`dishes upsert failed: ${error.message}`);
   }
 
-  // Insert offers (avoid duplicates per hall/meal/date/dish)
-  const dishIds = offers.map((o) => o.dish_id);
-  const sample = offers[0];
-  const { data: existing, error: selErr } = await supabase
-    .from("offers")
-    .select("dish_id")
-    .eq("hall", sample.hall)
-    .eq("meal", sample.meal)
-    .eq("offer_date", sample.offer_date)
-    .in("dish_id", dishIds);
-
-  if (selErr) throw new Error(`offers select failed: ${selErr.message}`);
-
-  const existingSet = new Set((existing ?? []).map((r: any) => r.dish_id as number));
-  const toInsert = offers.filter((r) => !existingSet.has(r.dish_id));
-
-  for (let i = 0; i < toInsert.length; i += 100) {
-    const chunk = toInsert.slice(i, i + 100);
+  // Upsert offers with a unique constraint that includes station
+  // This ensures the same dish can appear at multiple stations.
+  // You should have a unique index on (hall, meal, offer_date, station, dish_id).
+  let offersInserted = 0;
+  for (let i = 0; i < offers.length; i += 100) {
+    const chunk = offers.slice(i, i + 100);
     if (!chunk.length) continue;
-    const { error: insErr } = await supabase.from("offers").insert(chunk);
-    if (insErr) throw new Error(`offers insert failed: ${insErr.message}`);
+    const { error: upErr } = await supabase
+      .from("offers")
+      .upsert(chunk, { onConflict: "hall,meal,offer_date,station,dish_id" });
+    if (upErr) throw new Error(`offers upsert failed: ${upErr.message}`);
+    offersInserted += chunk.length;
   }
 
-  return { dishesUpserted: dishesPayload.length, offersInserted: toInsert.length };
+  return { dishesUpserted: dishesPayload.length, offersInserted };
 }
 
 // ---------- handler (single hall+meal per call) ----------

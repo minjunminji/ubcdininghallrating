@@ -5,7 +5,12 @@ const Halls = () => {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const meal = searchParams.get('meal')
-  const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
+  const todayLocalISO = () => {
+    const d = new Date()
+    const tzo = d.getTimezoneOffset() * 60000
+    return new Date(d.getTime() - tzo).toISOString().slice(0,10)
+  }
+  const date = searchParams.get('date') || todayLocalISO()
 
   const [halls, setHalls] = React.useState([])
   const [loading, setLoading] = React.useState(false)
@@ -13,6 +18,19 @@ const Halls = () => {
 
   const handleHallClick = (hall) => {
     navigate(`/dishes?meal=${encodeURIComponent(meal)}&hall=${encodeURIComponent(hall)}&date=${encodeURIComponent(date)}`)
+  }
+
+  const displayName = (hall) => {
+    if (!hall) return ''
+    const map = { 'feast': 'totem park', 'gather': 'place vanier', 'open-kitchen': 'orchard commons' }
+    return map[hall] || hall.replace('-', ' ')
+  }
+
+  const ratingClass = (avg) => {
+    if (avg == null) return 'rating-mid'
+    if (avg >= 4) return 'rating-high'
+    if (avg >= 3) return 'rating-mid'
+    return 'rating-low'
   }
 
   React.useEffect(() => {
@@ -26,25 +44,28 @@ const Halls = () => {
   }, [meal, date])
 
   return (
-    <div>
-      <button onClick={() => navigate(-1)}>Back</button>
-  <h2>{meal ? (meal.charAt(0).toUpperCase() + meal.slice(1)) : 'Dining'} Dining Options</h2>
-      {loading && <p>Loading...</p>}
-      {error && <p>Error: {error}</p>}
-      {!loading && !error && halls.length === 0 && (
-        <p>No dining options found for {meal?.charAt(0).toUpperCase() + meal?.slice(1)} on {date}.</p>
-      )}
-      <div>
+    <div className="halls">
+      <div style={{ marginLeft: '24px', marginTop: '8px' }}>
+        <a href="#" onClick={(e) => { e.preventDefault(); navigate(-1) }} aria-label="Back">←</a>
+      </div>
+
+      {loading && <p style={{ marginLeft: '60px' }}>Loading...</p>}
+      {error && <p style={{ marginLeft: '60px' }}>Error: {error}</p>}
+
+      <div className="list">
         {halls.map(h => {
           const avg = (h.avg_rating !== undefined && h.avg_rating !== null) ? h.avg_rating : (h.avg !== undefined ? h.avg : null)
+          const avgStr = avg != null ? Number(avg).toFixed(1) : '—'
           return (
-            <div key={h.hall} onClick={() => handleHallClick(h.hall)} style={{ cursor: 'pointer' }}>
-              <h2>{h.hall.charAt(0).toUpperCase() + h.hall.slice(1).replace('-', ' ')}</h2>
-              <p>Average Rating: {avg !== null ? Number(avg).toFixed(2) : 'N/A'} ({h.rating_count || 0} ratings)</p>
+            <div key={h.hall} className="row">
+              <a href="#" onClick={(e) => { e.preventDefault(); handleHallClick(h.hall) }}>{displayName(h.hall)}</a>
+              <span className={`avg ${ratingClass(avg)}`}>{avgStr}</span>
             </div>
           )
         })}
       </div>
+
+      <a className="rateLink" href="#" onClick={(e) => { e.preventDefault(); navigate('/rate') }}>rate</a>
     </div>
   )
 }
