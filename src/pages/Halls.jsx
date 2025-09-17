@@ -1,5 +1,6 @@
 import React from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { fetchJsonCached, prefetchJson } from '../lib/fetchCache'
 
 const Halls = () => {
   const [searchParams] = useSearchParams()
@@ -36,17 +37,17 @@ const Halls = () => {
   React.useEffect(() => {
     if (!meal || !date) return
     setLoading(true)
-    fetch(`http://localhost:4000/api/halls?meal=${encodeURIComponent(meal)}&date=${encodeURIComponent(date)}`)
-      .then(r => r.json())
-      .then(data => setHalls(data || []))
+    const url = `http://localhost:4000/api/halls?meal=${encodeURIComponent(meal)}&date=${encodeURIComponent(date)}`
+    fetchJsonCached(url, { ttl: 60000 })
+      .then(data => setHalls(Array.isArray(data) ? data : []))
       .catch(e => setError(e.message || 'Failed'))
       .finally(() => setLoading(false))
   }, [meal, date])
 
   return (
     <div className="halls">
-      <div style={{ marginLeft: '24px', marginTop: '8px' }}>
-        <a href="#" onClick={(e) => { e.preventDefault(); navigate(-1) }} aria-label="Back">←</a>
+      <div style={{ marginLeft: '60px', marginTop: '8px' }}>
+        <a href="#" onClick={(e) => { e.preventDefault(); navigate(-1) }} aria-label="Back">&lt;- back</a>
       </div>
 
       {loading && <p style={{ marginLeft: '60px' }}>Loading...</p>}
@@ -58,7 +59,16 @@ const Halls = () => {
           const avgStr = avg != null ? Number(avg).toFixed(1) : '—'
           return (
             <div key={h.hall} className="row">
-              <a href="#" onClick={(e) => { e.preventDefault(); handleHallClick(h.hall) }}>{displayName(h.hall)}</a>
+              <a
+                href="#"
+                onMouseEnter={() => {
+                  const u = `http://localhost:4000/api/dishes?hall=${encodeURIComponent(h.hall)}&meal=${encodeURIComponent(meal)}&date=${encodeURIComponent(date)}`
+                  prefetchJson(u, { ttl: 60000 })
+                }}
+                onClick={(e) => { e.preventDefault(); handleHallClick(h.hall) }}
+              >
+                {displayName(h.hall)}
+              </a>
               <span className={`avg ${ratingClass(avg)}`}>{avgStr}</span>
             </div>
           )

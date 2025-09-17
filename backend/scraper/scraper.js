@@ -147,7 +147,7 @@ function collectStationsFromJson(json: any): Station[] {
         groups.get(stationName) ??
         { station: stationName, dishes: [] as Dish[] };
 
-      const id: number | null =
+      const id =
         Number.isFinite(food?.id) ? food.id :
         Number.isFinite(food?.menuItemId) ? food.menuItemId :
         null;
@@ -167,7 +167,7 @@ function collectStationsFromJson(json: any): Station[] {
 }
 
 // keep your previous heuristic under a new name so we can fall back
-function heuristicCollectStations(obj: any): Station[] {
+function heuristicCollectStations(obj) {
   // …your previous logic from parseSequentialMenuArray/walk here…
   // (unchanged)
 }

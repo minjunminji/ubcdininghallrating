@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import StarRating from '../components/StarRating'
+import { fetchJsonCached } from '../lib/fetchCache'
 
 const Rate = () => {
   const [selectedMeal, setSelectedMeal] = useState('')
@@ -43,12 +44,10 @@ const Rate = () => {
     const mealVal = mealArg || selectedMeal
     if (!hallVal || !mealVal || !date) return
     setError(null)
-    setStations([])
     setLoading(true)
     try {
-      const r = await fetch(`http://localhost:4000/api/dishes?hall=${encodeURIComponent(hallVal)}&meal=${encodeURIComponent(mealVal)}&date=${encodeURIComponent(date)}`)
-      if (!r.ok) throw new Error('Failed fetching dishes')
-      const data = await r.json()
+      const url = `http://localhost:4000/api/dishes?hall=${encodeURIComponent(hallVal)}&meal=${encodeURIComponent(mealVal)}&date=${encodeURIComponent(date)}`
+      const data = await fetchJsonCached(url, { ttl: 60000 })
       const arr = Array.isArray(data) ? data : []
       setStations(arr)
       // initialize all stations as collapsed
@@ -98,8 +97,10 @@ const Rate = () => {
   setRefreshing(prev => ({ ...prev, [dishId]: true }))
   await fetchDishes()
   setRefreshing(prev => ({ ...prev, [dishId]: false }))
+      return true
     } catch (err) {
       setMessage(err.message || 'Submission failed')
+      return false
     } finally {
       setSending(prev => ({ ...prev, [dishId]: false }))
     }
@@ -118,11 +119,18 @@ const Rate = () => {
       setMessage('No ratings to submit')
       return
     }
+    let allOk = true
     for (const [dishId, ratingVal] of entries) {
       // eslint-disable-next-line no-await-in-loop
-      await postRating(dishId, ratingVal)
+      const ok = await postRating(dishId, ratingVal)
+      if (!ok) allOk = false
     }
-    // After submitting all, refresh once
+    if (allOk) {
+      // Navigate home with flash message
+      navigate('/', { state: { flash: 'rating submitted' } })
+      return
+    }
+    // If some failed, refresh once to reflect any updates
     await fetchDishes()
   }
 

@@ -18,52 +18,103 @@ body {
 
 header { text-align: center; padding: 24px 0 8px; }
 header h1 { margin: 0; font-weight: 600; color: var(--fg); }
+header h1 a { text-decoration: none; }
+header h1 a::after { display: none; }
 
-main { max-width: 1200px; margin: 0 auto; }
+main { max-width: 1200px; margin: 0 auto; padding-bottom: 160px; }
 
-a { color: var(--fg); text-decoration: none; }
-a:hover { text-decoration: underline; }
+/* Bottom fade overlay to keep content from crowding the fixed rate link */
+body::after {
+  content: "";
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 220px;
+  pointer-events: none;
+  /* stronger fade: quicker transition to background */
+  background: linear-gradient(
+    180deg,
+    rgba(217,217,217,0) 0%,
+    rgba(217,217,217,0.8) 45%,
+    var(--bg) 65%
+  );
+  z-index: 1;
+}
 
-.home .meals { margin-top: 80px; margin-left: 60px; display: flex; flex-direction: column; gap: 22px; }
+/* Flash overlay for post-submit confirmation */
+.flashOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 3; opacity: 1; transition: opacity 350ms ease; pointer-events: none; }
+.flashOverlay.fade { opacity: 0; }
+.flashMessage { background: var(--bg); color: var(--fg); padding: 16px 24px; border-radius: 8px; font-size: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+
+a { color: var(--fg); text-decoration: none; position: relative; }
+a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 220ms ease;
+}
+a:hover::after { transform: scaleX(1); }
+
+.home .meals { margin-top: 80px; margin-left: 60px; display: flex; flex-direction: column; gap: 22px; align-items: flex-start; }
+.home .meals a { display: inline-block; }
 .home a { font-size: 32px; }
-.home .rateLink { margin-top: 120px; margin-left: 60px; display: inline-block; font-size: 32px; }
+.home .rateLink { position: fixed; left: calc(50% - 600px + 60px); bottom: 64px; margin: 0; display: inline-block; font-size: 32px; }
+/* Keep the rate link pinned bottom-left on all pages */
+.rateLink { position: fixed; left: calc(50% - 600px + 60px); bottom: 64px; margin: 0; display: inline-block; font-size: 32px; z-index: 2; }
+@media (max-width: 1200px) {
+  .rateLink { left: 60px; }
+}
+
+/* Make default buttons a bit smaller (~25%) */
+button, input[type="button"], input[type="submit"], input[type="reset"] {
+  font-size: 0.75em;
+  padding: 0.45em 0.9em;
+}
 
 /* Halls page */
 .halls .list { margin-top: 40px; margin-left: 60px; display: flex; flex-direction: column; gap: 22px; max-width: 520px; }
 .halls .row { display: flex; align-items: center; gap: 16px; }
 .halls .row a { font-size: 32px; color: var(--fg); text-decoration: none; }
-.halls .row a:hover { text-decoration: underline; }
+.halls .row a:hover::after { transform: scaleX(1); }
 .halls .avg { margin-left: auto; font-size: 24px; }
 .rating-high { color: #3cc14b; }
 .rating-mid { color: #e3b04b; }
 .rating-low { color: #e05b5b; }
+.rating-none { color: #9c9c9c; }
 
 /* Dishes page */
-.dishes .grid { margin-top: 20px; padding: 0 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px 40px; }
-.dishes .station-header { display: flex; align-items: center; gap: 10px; font-size: 36px; }
+.dishes .grid { margin-top: 20px; padding: 0 40px 0 60px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px 40px; }
+.dishes .station-header { display: flex; align-items: center; gap: 10px; font-size: 24px; text-align: left; }
 .dishes .station-header.static { cursor: default; }
 .dishes .chev { width: 18px; display: inline-block; }
-.dishes .dish-list { list-style: none; padding-left: 28px; margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
-.dishes .dish-row { display: flex; gap: 12px; }
+.dishes .dish-list { list-style: none; padding-left: 0; margin-top: 10px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.dishes .dish-row { display: flex; gap: 12px; text-align: left; }
 .dishes .dish-row .name { flex: 1; }
 .dishes .dish-row .avg { margin-left: auto; }
 
 /* Rate page */
-.ratePage .tabRow { margin-left: 60px; display: flex; gap: 24px; font-size: 28px; }
+.ratePage .tabRow { padding-left: 60px; margin-left: 0; display: flex; gap: 24px; font-size: 28px; }
 .ratePage .tab { color: var(--fg); text-decoration: none; opacity: 0.6; }
-.ratePage .tab.active { text-decoration: underline; opacity: 1; }
-.ratePage .rateBody { margin-top: 40px; display: grid; grid-template-columns: 260px 1fr; gap: 40px; padding: 0 40px; }
-.ratePage .stationsCol { display: flex; flex-direction: column; gap: 14px; }
-.ratePage .stationItem { color: var(--fg); text-decoration: none; opacity: 0.35; font-size: 28px; }
+.ratePage .tab.active { opacity: 1; }
+.ratePage .tab.active::after { transform: scaleX(1); }
+.ratePage .rateBody { margin-top: 40px; display: grid; grid-template-columns: 260px 1fr; gap: 40px; padding: 0 40px 0 60px; }
+.ratePage .stationsCol { display: flex; flex-direction: column; gap: 14px; font-size: 16pt; }
+.ratePage .stationItem { color: var(--fg); text-decoration: none; opacity: 0.35; font-size: 16pt !important; }
 .ratePage .stationItem.active { opacity: 1; }
 .ratePage .dishesCol { display: flex; flex-direction: column; gap: 10px; }
 .ratePage .rateRow { display: flex; align-items: center; gap: 12px; }
-.ratePage .rateRow .name { flex: 1; font-size: 18px; }
+.ratePage .rateRow .name { flex: 1; font-size: 18px; text-transform: lowercase; }
 .ratePage .submitLink { display: inline-block; margin-left: 60px; margin-top: 60px; font-size: 24px; color: var(--fg); text-decoration: none; }
 
 /* Rate list accordion */
-.ratePage .rateList { margin-top: 30px; padding: 0 40px; display: flex; flex-direction: column; gap: 18px; }
+.ratePage .rateList { margin-top: 24px; padding: 0 40px; display: flex; flex-direction: column; gap: 10px; }
 .ratePage .rateSection { }
 .ratePage .rateHeader { display: flex; align-items: center; gap: 10px; font-size: 32px; cursor: pointer; opacity: 0.9; }
+.ratePage .rateHeader .title { font-size: 16pt; }
 .ratePage .rateHeader .chev { width: 18px; display: inline-block; }
-.ratePage .rateDishes { margin-left: 28px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.ratePage .rateDishes { margin-left: 28px; margin-top: 4px; display: flex; flex-direction: column; gap: 4px; }
